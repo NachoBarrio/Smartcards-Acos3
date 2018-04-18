@@ -58,7 +58,8 @@ print ("Respuesta a la autenticación " + resp);
 
 //Calcular MAC
 var Balance = resp.bytes(5,3);
-print("Balance1: "+Balance);
+print("Balance0: "+Balance);
+print("Balance1: "+Balance.toSigned());
 var transType = resp.bytes(4,1);
 var ATREF = resp.bytes(8,6);
 var TTREFC = resp.bytes(17,4);

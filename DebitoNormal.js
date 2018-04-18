@@ -100,6 +100,7 @@ print ("Respuesta al 2 inquire " + resp);
 //Calcular Mac Debit
 Balance = resp.bytes(5,3);
 print("Balance2: "+Balance);
+print("Balance1: "+Balance.toSigned());
 transType = resp.bytes(4,1);
 ATREF = resp.bytes(8,6);
 TTREFC = resp.bytes(17,4);

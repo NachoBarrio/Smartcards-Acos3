@@ -101,6 +101,7 @@ print ("Respuesta " + resp);
 //Calcular Mac Credit
 Balance = resp.bytes(5,3);
 print("Balance2: "+Balance);
+print("Balance2: "+Balance.toSigned());
 transType = resp.bytes(4,1);
 ATREF = resp.bytes(8,6);
 TTREFC = resp.bytes(17,4);

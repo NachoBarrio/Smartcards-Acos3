@@ -1,107 +1,90 @@
-//-----------------------------------------------------------------------------
-// FUNCIONES Y GLOBALES
-
-selectApdu = "80 A4";
-readRecordApdu  = "80 B2";
-writeRecordApdu = "8C D2"; //Modified to enable Secure Messaging
-
-startSessionApdu = "80 84 00 00 08";
-authenticateApdu = "80 82 00 00 10";
-getResponseApdu  = "80 C0 00 00 08";
-
-//-----------------------------------------------------------------------------
 card = new Card();
-var crypto = new Crypto();
-var deskey = new Key();
+
+crypto = new Crypto();
+deskey = new Key();
+IV = new ByteString("00 00 00 00 00 00 00 00", HEX);
+
+certifyKey       = new ByteString("A0 A1 A2 A3 A4 A5 A6 A7", HEX); //Kcf
+revokeDebitKey   = new ByteString("B0 B1 B2 B3 B4 B5 B6 B7", HEX); //Krd
+
+function inquire() {
+  referenceData    = crypto.generateRandom(4); //Random reference to include in the MAC calculation
+  keyNumber        = "02"; //Certify Key
+  inquireAccApdu   = "80 E4 " + keyNumber +" 00 04";
+  
+  print ("TRACE --- inquire ---");
+  print ("-- with refData = " + referenceData)
+
+  card.plainApdu(new ByteString(inquireAccApdu, HEX).concat(referenceData));
+  return card.plainApdu(new ByteString(getResponseApdu, HEX));
+}
+
+function checkInquireMAC(response, trace) {
+  if (response != "") {
+    print("TRACE --- resp: " + response);
+    MAC  = response.left(4);
+    data = response.right(21);
+    transactionType = data.bytes(0,1);
+    balance = data.bytes(1,3);
+    ATREF = data.bytes(4,6);
+
+    if (trace) {
+      print ("--transaction type: " + transactionType);
+      print ("--balance: " +balance);
+      print ("--ATREF: " + ATREF);
+    }
+
+    dataToEncrypt = referenceData.concat(transactionType).concat(balance).concat(ATREF).concat(new ByteString("00 00", HEX));
+
+    deskey.setComponent(Key.DES, certifyKey);
+    expectedMAC = crypto.encrypt(deskey, Crypto.DES_CBC, dataToEncrypt, IV);
+
+    assert(MAC.equals(expectedMAC.right(8).left(4)));
+  }
+}
 
 atr = card.reset(Card.RESET_COLD);
 
-Kt = new ByteString("AA 00 AA 01 AA 02 AA 03", HEX);
-Kc = new ByteString("DD 00 DD 01 DD 02 DD 03", HEX); 
+getResponseApdu  = "80 C0 00 00 19";
 
-//---------------------------------------- Start Session
-RNDc = card.plainApdu(new ByteString(startSessionApdu, HEX));
-//RNDc = new ByteString("00 00 00 00 00 00 00 00", HEX);
-print ("TRACE: RNDc  " + RNDc)
-//---------------------------------------- Authenticate
+response = inquire()
+checkInquireMAC(response, true)
 
-deskey.setComponent(Key.DES, Kt);
-encryptedMsg =  crypto.encrypt(deskey, Crypto.DES_ECB, RNDc);
-RNDt =  crypto.generateRandom(8);
-msg = encryptedMsg.concat(RNDt);
-print ("TRACE: auth message  " + msg);
+amountRevoke = new ByteString("00 04 E4", HEX); //1252 -> 12,52 euros
 
-card.plainApdu(new ByteString(authenticateApdu, HEX).concat(msg));
-//---------------------------------------- If All OK, get response from card and calculate Ks
-resp = card.plainApdu(new ByteString(getResponseApdu, HEX));
-print ("TRACE: Authenticate Response  " + resp);
+print ("TRACE --- Inquire Account - Done. Revoking Debit ");
 
-//---------------------------------------- Calculate and Verify Ks
-deskey.setComponent(Key.DES, Kc);
-enc1 = crypto.encrypt(deskey, Crypto.DES_ECB, RNDc);
-toEnc = enc1.xor(RNDt);
+//Revoke Debit
 
-deskey.setComponent(Key.DES, Kt);
-Ks = crypto.encrypt(deskey, Crypto.DES_ECB, toEnc);
-//---------------------------------------- Verify Ks
+newATREF = response.bytes(8,6).add(1);
+TTREF_D = response.right(4);
+balance = response.bytes(5,3);
+balanceMAC = balance.add(amountRevoke.toSigned())
 
-deskey.setComponent(Key.DES, Ks);
-verifier = crypto.encrypt(deskey, Crypto.DES_ECB, RNDt);
+print("ttrefd :" +TTREF_D);
+print("balance :" +balance);
+print("balanceToRestore :" +balanceMAC);
 
-assert(verifier.equals(resp));
+revokeDebitApdu = new ByteString("80 E8 00 00 04", HEX);
 
-//--------------------------------------- Secure Write
-fileId = "8DC4";
+checksum = new ByteString("E8", HEX).concat(balanceMAC).concat(TTREF_D).concat(newATREF).concat(new ByteString("00 00", HEX));
+deskey.setComponent(Key.DES, revokeDebitKey);
+cryptoChecksum = crypto.encrypt(deskey, Crypto.DES_CBC, checksum, IV);
 
-msg = new ByteString("MASTER SSDDEE.2017. Ignacio Barrio", ASCII);
+MAC = cryptoChecksum.right(8).left(4)
 
-msgPadded = msg.pad(Crypto.ISO9797_METHOD_2, true); //padded to next multiple of 8, ONLY TWO BYTES. SO ONLY 80 IS ADDED
+print("check :" +checksum);
+print("crypt :" +cryptoChecksum);
+print("mac   :" +MAC);
 
-paddingInd = (msgPadded.length - msg.length).toString(16); // SHOULD BE 2 ->
+card.plainApdu(new ByteString(revokeDebitApdu, HEX).concat(MAC));
+print("Código SW: " + card.SW.toString(16));
 
-if (paddingInd.length % 2 != 0) {
-	paddingInd = "0" + paddingInd; //SHOULD BE 02
+if( card.SW.toString(16) == "9000") {
+  print ("Revoke Debit Operation successful");
+  response = inquire()
+  checkInquireMAC(response, true)
+  print ("Card correct after Revoke Debit Operation");
 }
 
-IV = RNDc.and(new ByteString("00 00 00 00 00 00 FF FF", HEX)); //tHIS IS A FORMULA, SO LET'S SAY IT'S OK
-MacIV = RNDc.and(new ByteString("00 00 00 00 00 00 FF FF", HEX)).add(1);
-
-encriptedData = crypto.encrypt(deskey, Crypto.DES_CBC, msgPadded, IV);
-
-L87 = (encriptedData.length+1).toString(16); //
-
-//-------------------------- Calculate MAC
-AuthCode = new ByteString("89 04" + writeRecordApdu + "08 00" + "87" + L87 + paddingInd, HEX).concat(encriptedData);
-print("Clear MAC: " + AuthCode.toString());
-
-AuthCode = AuthCode.pad(Crypto.ISO9797_METHOD_2, true);
-
-encryptedAuthCode = crypto.encrypt(deskey, Crypto.DES_CBC, AuthCode, MacIV);
-
-print("Encripted Authenticated Code: " + encryptedAuthCode.toString());
-
-MAC = encryptedAuthCode.right(8).left(4);
-print("Message Authentication Code: " + MAC.toString());
-//----------------------------------------
-
-//secureWriteApdu = writeRecordApdu.concat(record, offset, msgTotalLength, "87", L87, paddingInd, encriptedData, "8E", "04", MAC) //plainApdu version
-secureWrite = "87" + L87 + paddingInd + encriptedData + "8E" + "04"; //sendApdu version
-
-print ("-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-x-");
-print ("msg not padded:\n"+msg);
-print ("msg not encripted:\n"+msgPadded);
-print ("encripted data:\n"+encriptedData);
-print ("mac:\n"+MAC);
-print ("APDU:\n"+secureWrite);//Apdu);
-
-card.plainApdu(new ByteString(selectApdu.concat("00 00 02", fileId), HEX));
-if ( card.SW.toString(16) == "9103")
-  {
-    print ("Writing with Secure Messaging");
-    resp = card.sendApdu(0x8C, 0xD2, 0x08, 0x00, new ByteString(secureWrite, HEX).concat(MAC));
-    print("resp: " + resp);
-    print("C�digo SW: " + card.SW.toString(16));
-  }
-
-
-//print ("in text: " + resp.toString(ASCII));
+card.close();
