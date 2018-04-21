@@ -124,7 +124,8 @@ if(autenticacion != ""){
     var ATREF = monedero.bytes(4,6);
 	var ATREF2 = ATREF.add(1);
 	var TTREFC = monedero.bytes(13,4);
-	var MacCredit = new ByteString("E6",HEX).concat(ingreso).concat(TTREFC).concat(ATREF2).concat(new ByteString("00 00",HEX));
+	var TTREFD = monedero.right(4);
+	var MacCredit = new ByteString("E6",HEX).concat(ingreso).concat(TTREFD).concat(ATREF2).concat(new ByteString("00 00",HEX));
 	deskey.setComponent(Key.DES, Kd);
 	var VI = new ByteString("00 00 00 00 00 00 00 00", HEX);
 	calcularMacCifrado = crypto.encrypt(deskey, Crypto.DES_CBC,MacCredit, VI);

@@ -146,7 +146,7 @@ function getInquireResponse() {
 }
 
 function revokeDebitSM(){
-	amountRevoke = new ByteString("00 0F A0", HEX); //4000 -> 40 euros
+	amountRevoke = new ByteString("00 04 E2", HEX); //4000 -> 40 euros
 
 	newATREF = ATREF.add(1);
 	balanceMAC = balance.add(amountRevoke.toSigned())
@@ -187,7 +187,7 @@ function revokeDebitSM(){
 }
 
 function verifyRevokeDebitSM(){
-  getResponseApdu  = "80 C0 00 00 0C"//.concat(responseLength);
+  getResponseApdu  = "80 C0 00 00".concat(responseLength);
   response = card.plainApdu(new ByteString(getResponseApdu, HEX));
   print ("resp: " + response);
   swStatus = response.left(4).right(2);

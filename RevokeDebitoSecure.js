@@ -126,7 +126,12 @@ if(autenticacion != ""){
     var ATREF = monedero.bytes(4,6);
 	var ATREF2 = ATREF.add(1);
 	var TTREFC = monedero.bytes(13,4);
-	var MacCredit = new ByteString("E8",HEX).concat(ingreso).concat(TTREFC).concat(ATREF2).concat(new ByteString("00 00",HEX));
+	var TTREFD = monedero.right(4);
+	var balanceFinal = Balance.add(ingreso.toSigned());
+	
+	var MacCredit = new ByteString("E8",HEX).concat(balanceFinal).concat(TTREFD).concat(ATREF2).concat(new ByteString("00 00",HEX));
+	
+	
 	deskey.setComponent(Key.DES, Kcf);
 	var VI = new ByteString("00 00 00 00 00 00 00 00", HEX);
 	calcularMacCifrado = crypto.encrypt(deskey, Crypto.DES_CBC,MacCredit, VI);
@@ -137,21 +142,23 @@ if(autenticacion != ""){
 	//estructurar datos
 	
 	deskey.setComponent(Key.DES, Ks);
-	var credito = Mac4Credit.concat(ingreso).concat(TTREFC);
-	var creditoRelleno = credito.pad(Crypto.ISO9797_METHOD_2);
+	//var credito = Mac4Credit.concat(ingreso).concat(TTREFC);
+	var creditoRelleno = Mac4Credit.pad(Crypto.ISO9797_METHOD_2);
 	var creditoCifrado = crypto.encrypt(deskey, Crypto.DES_CBC, creditoRelleno, vectorIMac3);
 	
 	var TLV87 = "87";
 	var L87 =  (creditoCifrado.length+1).toString(16);
+	if( L87.length < 2)
+		L87 = "0"+L87;
 	print ("L87: ", L87)
-	var Pi87 = "0" + (credito.pad(Crypto.ISO9797_METHOD_2).length - credito.length).toString(16);
+	var Pi87 = "0" + (Mac4Credit.pad(Crypto.ISO9797_METHOD_2).length - Mac4Credit.length).toString(16);
 	print ("pi: ", Pi87)
 
 	//Pasos para evitar la malformación de la petición, version 3
 	var TLV87 = new ByteString(TLV87+L87+Pi87,HEX).concat(creditoCifrado);
 	print ("TLV87: ", TLV87.toString())
 	var TLVDebR = new ByteString("89 04 8C E8 00 00",HEX);
-	TLVCred = TLVDeb.concat(TLV87);
+	TLVCred = TLVDebR.concat(TLV87);
 	
 	var TLVCredrelleno = TLVCred.pad(Crypto.ISO9797_METHOD_2, true);
 	
