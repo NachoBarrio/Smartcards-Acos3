@@ -80,7 +80,7 @@ print("Comprobar con devuelto: "+Mac4 +"<-->"+resp.bytes(0,4));
 
 /// Tras haber pedido al usuario el pin 
 var pin2 = new ByteString("00 01 02 03 04 05 06 07",HEX);
-var pinCifrado = crypto.encrypt(deskey, Crypto.DES_ECB, pin);
+var pinCifrado = crypto.encrypt(deskey, Crypto.DES_ECB, pin2);
 var resp = card.plainApdu(new ByteString("80 20 06 00 08",HEX).concat(pinCifrado));
 print("Código SW: " + card.SW.toString(16));
 
