@@ -120,7 +120,7 @@ if(autenticacion != ""){
     print("Balance pre operacion: "+monedero.bytes(1,3).toSigned());
     
     //realizamos la operacion de debit con 12,50e
-    //lanzar CREDIT 12,50e --> 1250 unidades
+    //lanzar debit 12,50e --> 1250 unidades
 	var ingreso = new ByteString("00 04 E2",HEX);
 	var Balance = monedero.bytes(1,3);
     var ATREF = monedero.bytes(4,6);
